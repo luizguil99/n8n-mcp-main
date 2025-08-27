@@ -1,0 +1,77 @@
+# docker-compose.yml para Coolify
+version: '3.8'
+
+services:
+  n8n-mcp:
+    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    container_name: n8n-mcp
+    restart: unless-stopped
+    
+    # Labels para o Traefik (proxy reverso do Coolify)
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.n8n-mcp.rule=Host(`n8n-mcp.fluxosmm.com`)"
+      - traefik.http.routers.n8n-mcp.entryPoints=https
+      - traefik.http.routers.n8n-mcp.tls=true
+      - traefik.http.routers.n8n-mcp.tls.certresolver=letsencrypt
+      - traefik.http.services.n8n-mcp.loadbalancer.server.port=3000
+      - traefik.http.middlewares.n8n-mcp-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.middlewares.n8n-mcp-headers.headers.customrequestheaders.X-Forwarded-Host=n8n-mcp.fluxosmm.com
+    
+    # Variáveis de ambiente
+    environment:
+      # Configurações obrigatórias
+      MCP_MODE: http
+      USE_FIXED_HTTP: true
+      AUTH_TOKEN: ${AUTH_TOKEN}
+      
+      # Configurações da aplicação
+      NODE_ENV: production
+      LOG_LEVEL: info
+      PORT: 3000
+      NODE_DB_PATH: /app/data/nodes.db
+      REBUILD_ON_START: false
+      
+      # URL externa para comunicação
+      N8N_MCP_URL: https://n8n-mcp.fluxosmm.com
+      
+      # Configurações opcionais do n8n (descomente se necessário)
+      # N8N_API_URL: ${N8N_API_URL}
+      # N8N_API_KEY: ${N8N_API_KEY}
+      # N8N_API_TIMEOUT: 30000
+      # N8N_API_MAX_RETRIES: 3
+    
+    # Volumes para persistência
+    volumes:
+      - n8n-mcp-data:/app/data
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Recursos e limites
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    
+    # Rede (opcional - o Traefik cuida do roteamento)
+    networks:
+      - coolify-network
+
+# Volumes nomeados para persistência
+volumes:
+  n8n-mcp-data:
+    driver: local
+
+# Redes (opcional)
+networks:
+  coolify-network:
+    external: true
+    name: coolify
